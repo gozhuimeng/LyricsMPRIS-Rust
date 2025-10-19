@@ -55,7 +55,7 @@ cargo build --release
 ./target/release/lyricsmpris
 
 # With local cache for faster loading
-./target/release/lyricsmpris --database ~/.config/lyricsmpris/cache.json
+./target/release/lyricsmpris --database ~/.local/share/lyricsmpris/cache.db
 
 # Disable karaoke highlighting
 ./target/release/lyricsmpris --no-karaoke
@@ -73,7 +73,7 @@ cargo build --release
 
 | Flag | Description | Example |
 |------|-------------|---------|
-| `--database PATH` | Enable local lyrics cache | `--database ~/.cache/lyrics.json` |
+| `--database PATH` | Enable SQLite lyrics cache | `--database ~/.local/share/lyricsmpris/cache.db` |
 | `--providers LIST` | Set provider priority | `--providers musixmatch,lrclib` |
 | `--visible-lines COUNT` | Limit visible lyric blocks (TUI only) | `--visible-lines 3` |
 | `--no-karaoke` | Disable word-level highlighting | - |
@@ -125,7 +125,7 @@ export LYRIC_PROVIDERS="lrclib,musixmatch"
 
 ## 💾 Local Database
 
-The database feature provides persistent lyrics caching for improved performance and offline access.
+The database feature provides persistent SQLite-based lyrics caching for improved performance and offline access.
 
 ### Setup
 
@@ -134,46 +134,60 @@ The database feature provides persistent lyrics caching for improved performance
 mkdir -p ~/.local/share/lyricsmpris
 
 # Run with database enabled
-lyricsmpris --database ~/.local/share/lyricsmpris/cache.json
+lyricsmpris --database ~/.local/share/lyricsmpris/cache.db
 ```
 
 ### How It Works
 
-1. **First Play**: Lyrics fetched from providers → stored in database
-2. **Subsequent Plays**: Lyrics loaded instantly from database (no API calls)
-3. **Auto-Save**: Database automatically persists to disk after each fetch
+1. **First Play**: Lyrics fetched from providers → stored in SQLite database
+2. **Subsequent Plays**: Lyrics loaded instantly from indexed database (no API calls)
+3. **Auto-Persist**: Database automatically commits to disk after each fetch
 
 ### Storage Format
 
-The database stores lyrics in their original format by provider:
+The database uses **SQLite** with indexed lookups for efficient storage and retrieval:
 
-- **LRCLIB Provider**: LRC timestamp format (`[MM:SS.CC]lyrics text`)
-- **Musixmatch Richsync**: Raw JSON with word-level timing data
-- **Musixmatch Subtitles**: Raw JSON with line-level timing
+#### Schema
 
-#### Example Entry
+```sql
+CREATE TABLE lyrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    artist TEXT NOT NULL,
+    title TEXT NOT NULL,
+    album TEXT NOT NULL,
+    duration REAL,
+    format TEXT NOT NULL,
+    raw_lyrics TEXT NOT NULL
+);
 
-```json
-{
-  "entries": {
-    "artist|title|album": {
-      "artist": "Arctic Monkeys",
-      "title": "Do I Wanna Know?",
-      "album": "AM",
-      "duration": 272.0,
-      "format": "richsync",
-      "raw_lyrics": "[{\"ts\":29.26,\"te\":31.597,...}]",
-    }
-  }
-}
+CREATE INDEX idx_lookup ON lyrics(artist, title, album);
 ```
+
+#### Format Types
+
+Lyrics are stored in their original format by provider:
+
+- **`lrclib`**: LRC timestamp format (`[MM:SS.CC]lyrics text`)
+- **`richsync`**: Musixmatch JSON with word-level timing data
+- **`subtitles`**: Musixmatch JSON with line-level timing data
+
+#### Example Stored Entry
+
+| artist | title | album | duration | format | raw_lyrics |
+|--------|-------|-------|----------|--------|------------|
+| arctic monkeys | do i wanna know? | am | 272.0 | richsync | `[{"ts":29.26,"te":31.597,...}]` |
+
+> **Note**: Artist, title, and album are normalized (lowercase, trimmed) for case-insensitive matching.
 
 ### Benefits
 
-- ⚡ **Instant Loading**: Cached tracks display immediately
+- ⚡ **Instant Loading**: Indexed lookups provide sub-millisecond retrieval
 - 🌐 **Offline Mode**: No internet required for cached songs
 - 📉 **Reduced API Calls**: Be kind to provider rate limits
 - 💪 **Provider Independence**: Lyrics persist even if APIs change
+- 🧠 **Minimal Memory**: SQLite loads only requested rows, not entire database
+- 🔍 **Fast Queries**: Indexed by artist/title/album for efficient lookups
+- 🔄 **WAL Mode**: Write-Ahead Logging for better concurrency
 
 ## 🔌 MPRIS Integration
 
