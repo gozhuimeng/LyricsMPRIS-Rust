@@ -22,13 +22,12 @@
 //!
 //! ```sql
 //! CREATE TABLE lyrics (
-//!     id INTEGER PRIMARY KEY,
 //!     artist TEXT NOT NULL,
 //!     title TEXT NOT NULL,
 //!     album TEXT NOT NULL,
 //!     duration REAL,
 //!     format TEXT NOT NULL,
-//!     raw_lyrics TEXT NOT NULL
+//!     raw_lyrics BLOB NOT NULL
 //! );
 //! CREATE INDEX idx_lookup ON lyrics(artist, title, album);
 //! ```
@@ -62,6 +61,7 @@ use crate::lyrics::parse::{parse_richsync_body, parse_subtitle_body, parse_synce
 use crate::lyrics::types::{LyricsError, ProviderResult};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use sqlx::Row;
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -116,6 +116,20 @@ fn normalize(s: &str) -> String {
     s.trim().to_lowercase()
 }
 
+fn compress_raw_lyrics(raw: &str) -> Result<Vec<u8>, std::io::Error> {
+    // Level 3 is zstd's default and a good balance for small payloads.
+    zstd::stream::encode_all(Cursor::new(raw.as_bytes()), 3)
+}
+
+fn decompress_raw_lyrics(raw: Vec<u8>) -> Option<String> {
+    if raw.is_empty() {
+        return Some(String::new());
+    }
+
+    let decoded = zstd::stream::decode_all(Cursor::new(&raw)).ok()?;
+    String::from_utf8(decoded).ok()
+}
+
 // ============================================================================
 // SQLite Connection & Schema
 // ============================================================================
@@ -125,13 +139,12 @@ async fn create_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS lyrics (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
             artist TEXT NOT NULL,
             title TEXT NOT NULL,
             album TEXT NOT NULL,
             duration REAL,
             format TEXT NOT NULL,
-            raw_lyrics TEXT NOT NULL
+            raw_lyrics BLOB NOT NULL
         )
         "#,
     )
@@ -285,12 +298,47 @@ pub async fn fetch_from_database(
     .fetch_optional(pool)
     .await
     .ok()??;
+
+    let delete_cached_entry = || async {
+        let _ = sqlx::query(
+            r#"
+            DELETE FROM lyrics
+            WHERE artist = ? AND title = ? AND album = ?
+            "#,
+        )
+        .bind(&artist_norm)
+        .bind(&title_norm)
+        .bind(&album_norm)
+        .execute(pool)
+        .await;
+    };
     
     // Extract fields from row
+    let raw_lyrics_blob: Vec<u8> = row.try_get("raw_lyrics").ok()?;
+    let Some(raw_lyrics) = decompress_raw_lyrics(raw_lyrics_blob) else {
+        tracing::warn!(
+            artist = %artist,
+            title = %title,
+            "Failed to decode zstd lyrics from database; deleting cache entry"
+        );
+        delete_cached_entry().await;
+        return None;
+    };
+
+    let Some(format) = LyricsFormat::from_str(row.get("format")) else {
+        tracing::warn!(
+            artist = %artist,
+            title = %title,
+            "Invalid lyrics format in database; deleting cache entry"
+        );
+        delete_cached_entry().await;
+        return None;
+    };
+
     let entry = LyricsEntry {
         duration: row.get("duration"),
-        format: LyricsFormat::from_str(row.get("format"))?,
-        raw_lyrics: row.get("raw_lyrics"),
+        format,
+        raw_lyrics,
     };
     
     // Optional: Validate duration match if both are present
@@ -303,7 +351,19 @@ pub async fn fetch_from_database(
     }
     
     // Parse and return
-    Some(parse_stored_lyrics(&entry))
+    match parse_stored_lyrics(&entry) {
+        Ok(ok) => Some(Ok(ok)),
+        Err(e) => {
+            tracing::warn!(
+                artist = %artist,
+                title = %title,
+                error = %e,
+                "Failed to parse cached lyrics; deleting cache entry"
+            );
+            delete_cached_entry().await;
+            None
+        }
+    }
 }
 
 /// Stores lyrics in the database.
@@ -343,6 +403,18 @@ pub async fn store_in_database(
     .await;
     
     // Insert new entry
+    let raw_lyrics_blob = match compress_raw_lyrics(&raw_lyrics) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            tracing::warn!(
+                artist = %artist,
+                title = %title,
+                error = %e,
+                "Failed to zstd-compress lyrics; skipping database cache"
+            );
+            return;
+        }
+    };
     let result = sqlx::query(
         r#"
         INSERT INTO lyrics (artist, title, album, duration, format, raw_lyrics)
@@ -354,7 +426,7 @@ pub async fn store_in_database(
     .bind(&album_norm)
     .bind(duration)
     .bind(format.to_str())
-    .bind(&raw_lyrics)
+    .bind(raw_lyrics_blob)
     .execute(pool)
     .await;
     
