@@ -151,17 +151,18 @@ The database uses **SQLite** with indexed lookups for efficient storage and retr
 
 ```sql
 CREATE TABLE lyrics (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
     artist TEXT NOT NULL,
     title TEXT NOT NULL,
     album TEXT NOT NULL,
     duration REAL,
     format TEXT NOT NULL,
-    raw_lyrics TEXT NOT NULL
+    raw_lyrics BLOB NOT NULL
 );
 
 CREATE INDEX idx_lookup ON lyrics(artist, title, album);
 ```
+
+`raw_lyrics` is stored as a **Zstd-compressed** blob. It is transparently decompressed when reading from the cache.
 
 #### Format Types
 
@@ -176,6 +177,8 @@ Lyrics are stored in their original format by provider:
 | artist | title | album | duration | format | raw_lyrics |
 |--------|-------|-------|----------|--------|------------|
 | arctic monkeys | do i wanna know? | am | 272.0 | richsync | `[{"ts":29.26,"te":31.597,...}]` |
+
+> **Note**: `raw_lyrics` is shown above **decompressed** for readability.
 
 > **Note**: Artist, title, and album are normalized (lowercase, trimmed) for case-insensitive matching.
 
