@@ -15,6 +15,32 @@ pub struct TrackMetadata {
     pub spotify_id: Option<String>,
 }
 
+impl TrackMetadata {
+    /// Normalizes artist string by taking the first artist when multiple are combined with `/`.
+    ///
+    /// Handles formats like "Artist1 / Artist2" or "Artist1/Artist2" by splitting
+    /// on `/` and returning only the first part, trimmed of whitespace.
+    fn normalize_artist(artist: &str) -> String {
+        artist
+            .split('/')
+            .next()
+            .map(|s| s.trim())
+            .unwrap_or_default()
+            .to_string()
+    }
+
+    /// Returns the artist string for API search.
+    ///
+    /// When `include_artist` is false, returns an empty string to search without artist info.
+    pub fn artist_for_search(&self, include_artist: bool) -> String {
+        if include_artist {
+            Self::normalize_artist(&self.artist)
+        } else {
+            String::new()
+        }
+    }
+}
+
 /// Internal metadata structure matching MPRIS specification
 /// 
 /// Uses zvariant's DeserializeDict to properly handle D-Bus dictionary types.
@@ -40,6 +66,7 @@ impl From<MprisMetadata> for TrackMetadata {
             .artist
             .and_then(|artists| artists.into_iter().next())
             .unwrap_or_default();
+        let artist = Self::normalize_artist(&artist);
         let album = md
             .album
             .and_then(|albums| albums.into_iter().next())
@@ -114,11 +141,14 @@ pub fn extract_metadata(map: &HashMap<String, OwnedValue>) -> TrackMetadata {
 
     let title = get_string("xesam:title").unwrap_or_default();
     
-    // Artist: try array first, fallback to string
+    // Artist: try array first, fallback to string, then normalize
     let artist = get_string_array("xesam:artist")
         .and_then(|arr| arr.into_iter().next())
         .or_else(|| get_string("xesam:artist"))
         .unwrap_or_default();
+    let normalized = TrackMetadata::normalize_artist(&artist);
+    tracing::debug!(artist_raw = %artist, artist_normalized = %normalized, "Artist normalization");
+    let artist = normalized;
     
     // Album: try array first, fallback to string
     let album = get_string_array("xesam:album")
@@ -203,5 +233,40 @@ mod tests {
         assert_eq!(track.artist, "Artist 1");
         assert_eq!(track.album, "Test Album");
         assert_eq!(track.length, Some(180.0));
+    }
+
+    #[test]
+    fn test_normalize_artist_single() {
+        assert_eq!(TrackMetadata::normalize_artist("Artist One"), "Artist One");
+    }
+
+    #[test]
+    fn test_normalize_artist_with_slash_space() {
+        assert_eq!(TrackMetadata::normalize_artist("Artist One / Artist Two"), "Artist One");
+    }
+
+    #[test]
+    fn test_normalize_artist_with_slash_no_space() {
+        assert_eq!(TrackMetadata::normalize_artist("Artist One/Artist Two"), "Artist One");
+    }
+
+    #[test]
+    fn test_normalize_artist_trim_whitespace() {
+        assert_eq!(TrackMetadata::normalize_artist("  Artist One  "), "Artist One");
+        assert_eq!(TrackMetadata::normalize_artist("  Artist One  / Artist Two  "), "Artist One");
+    }
+
+    #[test]
+    fn test_artist_for_search() {
+        let meta = TrackMetadata {
+            title: "Test".to_string(),
+            artist: "Artist One / Artist Two".to_string(),
+            album: "".to_string(),
+            length: None,
+            spotify_id: None,
+        };
+
+        assert_eq!(meta.artist_for_search(true), "Artist One");
+        assert_eq!(meta.artist_for_search(false), "");
     }
 }

@@ -57,7 +57,8 @@ fn build_lrclib_url(artist: &str, title: &str, album: &str, duration: Option<f64
         format!("track_name={}", urlencoding::encode(title)),
     ];
 
-    if !album.is_empty() {
+    // Only include album if it doesn't contain the track name (avoids 404s from bad metadata)
+    if !album.is_empty() && !album.to_lowercase().contains(&title.to_lowercase()) {
         params.push(format!("album_name={}", urlencoding::encode(album)));
     }
 
