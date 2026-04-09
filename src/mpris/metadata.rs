@@ -13,6 +13,24 @@ pub struct TrackMetadata {
     pub album: String,
     pub length: Option<f64>,
     pub spotify_id: Option<String>,
+    #[doc(hidden)]
+    pub all_artists: Vec<String>,
+}
+
+/// Extracts all artists from a string that may contain multiple artists separated by `/`.
+///
+/// Handles formats like "Artist1 / Artist2" or "Artist1/Artist2".
+fn extract_artists_from_string(s: &str) -> Vec<String> {
+    if s.contains('/') {
+        s.split('/')
+            .map(|a| a.trim().to_string())
+            .filter(|a| !a.is_empty())
+            .collect()
+    } else if !s.is_empty() {
+        vec![s.to_string()]
+    } else {
+        Vec::new()
+    }
 }
 
 impl TrackMetadata {
@@ -29,15 +47,29 @@ impl TrackMetadata {
             .to_string()
     }
 
-    /// Returns the artist string for API search.
-    ///
-    /// When `include_artist` is false, returns an empty string to search without artist info.
-    pub fn artist_for_search(&self, include_artist: bool) -> String {
-        if include_artist {
-            Self::normalize_artist(&self.artist)
-        } else {
-            String::new()
+    /// Extracts all artists from a value that may be:
+    /// 1. A single artist string like "Artist1"
+    /// 2. Multiple artists in one string like "Artist1 / Artist2"
+    /// 3. Multiple artists in an array
+    fn extract_artists(value: Option<String>) -> Vec<String> {
+        match value {
+            Some(s) if s.contains('/') => {
+                // String contains multiple artists separated by /
+                s.split('/')
+                    .map(|a| a.trim().to_string())
+                    .filter(|a| !a.is_empty())
+                    .collect()
+            }
+            Some(s) if !s.is_empty() => vec![s],
+            _ => Vec::new(),
         }
+    }
+
+    /// Returns all artists extracted from the original metadata.
+    ///
+    /// Used when the first artist fails to find lyrics - tries subsequent artists.
+    pub fn all_artists(&self) -> Vec<String> {
+        self.all_artists.clone()
     }
 }
 
@@ -62,11 +94,21 @@ struct MprisMetadata {
 impl From<MprisMetadata> for TrackMetadata {
     fn from(md: MprisMetadata) -> Self {
         let title = md.title.unwrap_or_default();
-        let artist = md
-            .artist
-            .and_then(|artists| artists.into_iter().next())
+        
+        // Extract all artists from array, handling both ["A1", "A2"] and ["A1 / A2"] formats
+        let all_artists = md.artist
+            .map(|arr| {
+                arr.into_iter()
+                    .map(|s| extract_artists_from_string(&s))
+                    .flatten()
+                    .collect::<Vec<String>>()
+            })
             .unwrap_or_default();
-        let artist = Self::normalize_artist(&artist);
+        
+        let artist = all_artists.first()
+            .cloned()
+            .unwrap_or_default();
+        
         let album = md
             .album
             .and_then(|albums| albums.into_iter().next())
@@ -100,6 +142,7 @@ impl From<MprisMetadata> for TrackMetadata {
             album,
             length,
             spotify_id,
+            all_artists,
         }
     }
 }
@@ -141,14 +184,35 @@ pub fn extract_metadata(map: &HashMap<String, OwnedValue>) -> TrackMetadata {
 
     let title = get_string("xesam:title").unwrap_or_default();
     
-    // Artist: try array first, fallback to string, then normalize
-    let artist = get_string_array("xesam:artist")
-        .and_then(|arr| arr.into_iter().next())
+    // Artist: try array first, fallback to string
+    // Handle both formats: ["Artist1", "Artist2"] and ["Artist1 / Artist2"]
+    let artists_from_array = get_string_array("xesam:artist").map(|arr| {
+        // tracing::debug!(artist_array = ?arr, "xesam:artist is array");
+        arr.into_iter()
+            .map(|s| {
+                // Each element might be "Artist1 / Artist2", so extract all
+                let extracted = extract_artists_from_string(&s);
+                // tracing::debug!(element = %s, extracted = ?extracted, "Extracted artists from array element");
+                extracted
+            })
+            .flatten()
+            .collect::<Vec<String>>()
+    });
+    
+    let artist_raw = artists_from_array
+        .as_ref()
+        .map(|v| v.first().cloned())
+        .flatten()
         .or_else(|| get_string("xesam:artist"))
         .unwrap_or_default();
-    let normalized = TrackMetadata::normalize_artist(&artist);
-    tracing::debug!(artist_raw = %artist, artist_normalized = %normalized, "Artist normalization");
-    let artist = normalized;
+    
+    // Get all artists for searching (not just the first)
+    let all_artists_extracted = artists_from_array
+        .or_else(|| get_string("xesam:artist").map(|s| extract_artists_from_string(&s)))
+        .unwrap_or_default();
+    
+    // tracing::debug!(artist_raw = %artist_raw, all_artists = ?all_artists_extracted, "Artists extracted");
+    let artist = artist_raw;
     
     // Album: try array first, fallback to string
     let album = get_string_array("xesam:album")
@@ -182,6 +246,7 @@ pub fn extract_metadata(map: &HashMap<String, OwnedValue>) -> TrackMetadata {
         album,
         length,
         spotify_id,
+        all_artists: all_artists_extracted,
     }
 }
 
@@ -257,7 +322,7 @@ mod tests {
     }
 
     #[test]
-    fn test_artist_for_search() {
+    fn test_all_artists() {
         let meta = TrackMetadata {
             title: "Test".to_string(),
             artist: "Artist One / Artist Two".to_string(),
@@ -266,7 +331,32 @@ mod tests {
             spotify_id: None,
         };
 
-        assert_eq!(meta.artist_for_search(true), "Artist One");
-        assert_eq!(meta.artist_for_search(false), "");
+        assert_eq!(meta.all_artists(), vec!["Artist One", "Artist Two"]);
+    }
+
+    #[test]
+    fn test_all_artists_single() {
+        let meta = TrackMetadata {
+            title: "Test".to_string(),
+            artist: "Artist One".to_string(),
+            album: "".to_string(),
+            length: None,
+            spotify_id: None,
+        };
+
+        assert_eq!(meta.all_artists(), vec!["Artist One"]);
+    }
+
+    #[test]
+    fn test_all_artists_empty() {
+        let meta = TrackMetadata {
+            title: "Test".to_string(),
+            artist: "".to_string(),
+            album: "".to_string(),
+            length: None,
+            spotify_id: None,
+        };
+
+        assert_eq!(meta.all_artists(), Vec::<String>::new());
     }
 }

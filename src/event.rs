@@ -181,18 +181,23 @@ enum FetchResult {
     NonTransient(crate::lyrics::LyricsError),
 }
 
-/// Attempts to fetch lyrics from a single provider by name.
+/// Attempts to fetch lyrics from a single provider with a specific artist.
 ///
 /// # Returns
 ///
 /// - `Success` if lyrics were fetched and stored
 /// - `Transient` if the provider didn't have lyrics or had a recoverable error
 /// - `NonTransient` if a fatal error occurred
-async fn try_provider(provider: &str, meta: &TrackMetadata, state: &mut StateBundle) -> FetchResult {
+async fn try_provider_for_artist(
+    provider: &str,
+    meta: &TrackMetadata,
+    artist: &str,
+    state: &mut StateBundle,
+) -> FetchResult {
     match provider {
-        "lrcx" | "lrc.cx" => try_lrcx(meta, state).await,
-        "lrclib" => try_lrclib(meta, state).await,
-        "musixmatch" => try_musixmatch(meta, state).await,
+        "lrcx" | "lrc.cx" => try_lrcx_with_artist(meta, artist, state).await,
+        "lrclib" => try_lrclib_with_artist(meta, artist, state).await,
+        "musixmatch" => try_musixmatch_with_artist(meta, artist, state).await,
         _ => {
             // Unknown provider - treat as transient to continue to next
             FetchResult::Transient
@@ -220,11 +225,11 @@ async fn store_lyrics_in_cache(
     }
 }
 
-/// Fetches lyrics from lrc.cx.
+/// Fetches lyrics from lrc.cx with a specific artist.
 ///
 /// Network errors are treated as transient to allow fallback to other providers.
-async fn try_lrcx(meta: &TrackMetadata, state: &mut StateBundle) -> FetchResult {
-    match crate::lyrics::fetch_lyrics_from_lrcx(&meta.artist, &meta.title, &meta.album, meta.length).await {
+async fn try_lrcx_with_artist(meta: &TrackMetadata, artist: &str, state: &mut StateBundle) -> FetchResult {
+    match crate::lyrics::fetch_lyrics_from_lrcx(artist, &meta.title, &meta.album, meta.length).await {
         Ok((lines, raw)) if !lines.is_empty() => {
             // lrc.cx returns LRC text format, same storage format as LRCLIB.
             state.update_lyrics(lines, meta, None, Some(Provider::LRCLIB));
@@ -237,11 +242,11 @@ async fn try_lrcx(meta: &TrackMetadata, state: &mut StateBundle) -> FetchResult 
     }
 }
 
-/// Fetches lyrics from LRCLIB.
+/// Fetches lyrics from LRCLIB with a specific artist.
 ///
 /// Network errors are treated as transient to allow fallback to other providers.
-async fn try_lrclib(meta: &TrackMetadata, state: &mut StateBundle) -> FetchResult {
-    match crate::lyrics::fetch_lyrics_from_lrclib(&meta.artist, &meta.title, &meta.album, meta.length).await {
+async fn try_lrclib_with_artist(meta: &TrackMetadata, artist: &str, state: &mut StateBundle) -> FetchResult {
+    match crate::lyrics::fetch_lyrics_from_lrclib(artist, &meta.title, &meta.album, meta.length).await {
         Ok((lines, raw)) if !lines.is_empty() => {
             state.update_lyrics(lines, meta, None, Some(Provider::LRCLIB));
             store_lyrics_in_cache(meta, raw, crate::lyrics::database::LyricsFormat::Lrclib).await;
@@ -262,13 +267,13 @@ fn provider_to_db_format(provider: Provider) -> crate::lyrics::database::LyricsF
     }
 }
 
-/// Fetches lyrics from Musixmatch.
+/// Fetches lyrics from Musixmatch with a specific artist.
 ///
 /// Automatically detects whether the response is Richsync or Subtitles format.
 /// Network errors are treated as transient.
-async fn try_musixmatch(meta: &TrackMetadata, state: &mut StateBundle) -> FetchResult {
+async fn try_musixmatch_with_artist(meta: &TrackMetadata, artist: &str, state: &mut StateBundle) -> FetchResult {
     match crate::lyrics::fetch_lyrics_from_musixmatch_usertoken(
-        &meta.artist,
+        artist,
         &meta.title,
         &meta.album,
         meta.length,
@@ -407,9 +412,9 @@ async fn try_database(
 /// # Behavior
 ///
 /// 1. Check database first
-/// 2. Try each provider in order
+/// 2. Try each provider, and for each provider try all artists in order
 /// 3. On success: update state and return
-/// 4. On transient error: try next provider
+/// 4. On transient error: try next artist/provider
 /// 5. On non-transient error: log, update state with error, return
 /// 6. If all fail: update state with empty lyrics
 async fn fetch_api_lyrics(
@@ -422,26 +427,52 @@ async fn fetch_api_lyrics(
         return;
     }
 
+    // Get all artists to try: first artist, second artist, ..., empty string
+    let mut artists = meta.all_artists();
+    // tracing::debug!(raw_artist = %meta.artist, artists = ?artists, "Artists extracted");
+    
+    if artists.is_empty() || artists[0].is_empty() {
+        artists.clear();
+    } else {
+        artists.push(String::new()); // Try without artist as last resort
+    }
+
     // Database miss - try external providers
     for provider in providers {
-        match try_provider(provider, meta, state).await {
-            FetchResult::Success => return,
-            FetchResult::Transient => continue,
-            FetchResult::NonTransient(err) => {
-                tracing::warn!(
-                    provider = %provider,
-                    error = %err,
-                    track = %meta.title,
-                    artist = %meta.artist,
-                    "Provider failed to fetch lyrics"
-                );
-                state.update_lyrics(Vec::new(), meta, Some(err.to_string()), None);
-                return;
+        for artist in &artists {
+            // tracing::debug!(
+            //     provider = %provider,
+            //     artist = %artist,
+            //     track = %meta.title,
+            //     "Trying provider with artist"
+            // );
+            match try_provider_for_artist(provider, meta, artist, state).await {
+                FetchResult::Success => {
+                    // tracing::debug!("Lyrics found with artist: {}", artist);
+                    return;
+                }
+                FetchResult::Transient => {
+                    // Try next artist or next provider
+                    // tracing::debug!("Transient error, trying next");
+                    continue;
+                }
+                FetchResult::NonTransient(err) => {
+                    tracing::warn!(
+                        provider = %provider,
+                        error = %err,
+                        track = %meta.title,
+                        artist = %artist,
+                        "Provider failed to fetch lyrics"
+                    );
+                    state.update_lyrics(Vec::new(), meta, Some(err.to_string()), None);
+                    return;
+                }
             }
         }
     }
 
     // No provider succeeded - update with empty lyrics
+    // tracing::debug!("No lyrics found after trying all artists");
     state.update_lyrics(Vec::new(), meta, None, None);
 }
 

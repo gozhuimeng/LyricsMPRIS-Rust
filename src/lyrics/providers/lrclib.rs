@@ -20,12 +20,15 @@ pub async fn fetch_lyrics_from_lrclib(
     duration: Option<f64>,
 ) -> ProviderResult {
     let url = build_lrclib_url(artist, title, album, duration);
+    // tracing::debug!(artist = %artist, url = %url, "lrclib request");
     
     let resp = http_client()
         .get(&url)
         .header("User-Agent", "LyricsMPRIS/1.0")
         .send()
         .await?;
+
+    // tracing::debug!(status = %resp.status(), "lrclib response");
 
     // 404 means no lyrics found - not an error
     if resp.status().as_u16() == 404 {
