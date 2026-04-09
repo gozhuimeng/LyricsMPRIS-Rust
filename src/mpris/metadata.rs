@@ -47,6 +47,39 @@ impl TrackMetadata {
             .to_string()
     }
 
+    /// Parses Kugou player title format.
+    ///
+    /// Format: `title_artists_uselessInfo_lyrics`
+    /// Example: `Where Do We Go_ZHANGYE、Steve Aoki、Rosie Darling_...歌词...`
+    ///
+    /// Returns (title, artists) or None if not Kugou format.
+    fn parse_kugou_title(title: &str) -> Option<(String, Vec<String>)> {
+        if !title.contains("歌曲下载_酷狗音乐") {
+            return None;
+        }
+
+        let parts: Vec<&str> = title.split('_').collect();
+        if parts.len() < 2 {
+            return None;
+        }
+
+        let song_title = parts[0].trim().to_string();
+        let artists_str = parts[1];
+
+        // Artists are separated by `、` in Kugou format
+        let artists: Vec<String> = artists_str
+            .split('、')
+            .map(|a| a.trim().to_string())
+            .filter(|a| !a.is_empty())
+            .collect();
+
+        if artists.is_empty() {
+            return None;
+        }
+
+        Some((song_title, artists))
+    }
+
     /// Extracts all artists from a value that may be:
     /// 1. A single artist string like "Artist1"
     /// 2. Multiple artists in one string like "Artist1 / Artist2"
@@ -93,17 +126,24 @@ struct MprisMetadata {
 
 impl From<MprisMetadata> for TrackMetadata {
     fn from(md: MprisMetadata) -> Self {
-        let title = md.title.unwrap_or_default();
+        let title_raw = md.title.unwrap_or_default();
         
-        // Extract all artists from array, handling both ["A1", "A2"] and ["A1 / A2"] formats
-        let all_artists = md.artist
-            .map(|arr| {
-                arr.into_iter()
-                    .map(|s| extract_artists_from_string(&s))
-                    .flatten()
-                    .collect::<Vec<String>>()
-            })
-            .unwrap_or_default();
+        // Check if this is Kugou player title format
+        let (title, all_artists) = match TrackMetadata::parse_kugou_title(&title_raw) {
+            Some((parsed_title, parsed_artists)) => (parsed_title, parsed_artists),
+            None => {
+                // Extract all artists from array, handling both ["A1", "A2"] and ["A1 / A2"] formats
+                let artists = md.artist
+                    .map(|arr| {
+                        arr.into_iter()
+                            .map(|s| extract_artists_from_string(&s))
+                            .flatten()
+                            .collect::<Vec<String>>()
+                    })
+                    .unwrap_or_default();
+                (title_raw, artists)
+            }
+        };
         
         let artist = all_artists.first()
             .cloned()
@@ -182,37 +222,42 @@ pub fn extract_metadata(map: &HashMap<String, OwnedValue>) -> TrackMetadata {
         })
     };
 
-    let title = get_string("xesam:title").unwrap_or_default();
+    let title_raw = get_string("xesam:title").unwrap_or_default();
     
-    // Artist: try array first, fallback to string
-    // Handle both formats: ["Artist1", "Artist2"] and ["Artist1 / Artist2"]
-    let artists_from_array = get_string_array("xesam:artist").map(|arr| {
-        // tracing::debug!(artist_array = ?arr, "xesam:artist is array");
-        arr.into_iter()
-            .map(|s| {
-                // Each element might be "Artist1 / Artist2", so extract all
-                let extracted = extract_artists_from_string(&s);
-                // tracing::debug!(element = %s, extracted = ?extracted, "Extracted artists from array element");
-                extracted
-            })
-            .flatten()
-            .collect::<Vec<String>>()
-    });
+    // Check if this is Kugou player title format
+    // Format: title_artists_uselessInfo_lyrics
+    // Example: "Where Do We Go_ZHANGYE、Steve Aoki、Rosie Darling_...歌词..."
+    let (title, all_artists_extracted) = match TrackMetadata::parse_kugou_title(&title_raw) {
+        Some((parsed_title, parsed_artists)) => {
+            // tracing::debug!(title = %parsed_title, artists = ?parsed_artists, "Kugou title format detected");
+            (parsed_title, parsed_artists)
+        }
+        None => {
+            // Artist: try array first, fallback to string
+            // Handle both formats: ["Artist1", "Artist2"] and ["Artist1 / Artist2"]
+            let artists_from_array = get_string_array("xesam:artist").map(|arr| {
+                arr.into_iter()
+                    .map(|s| extract_artists_from_string(&s))
+                    .flatten()
+                    .collect::<Vec<String>>()
+            });
+            
+            let artist_raw = artists_from_array
+                .as_ref()
+                .map(|v| v.first().cloned())
+                .flatten()
+                .or_else(|| get_string("xesam:artist"))
+                .unwrap_or_default();
+            
+            let all_artists = artists_from_array
+                .or_else(|| get_string("xesam:artist").map(|s| extract_artists_from_string(&s)))
+                .unwrap_or_default();
+            
+            (title_raw, all_artists)
+        }
+    };
     
-    let artist_raw = artists_from_array
-        .as_ref()
-        .map(|v| v.first().cloned())
-        .flatten()
-        .or_else(|| get_string("xesam:artist"))
-        .unwrap_or_default();
-    
-    // Get all artists for searching (not just the first)
-    let all_artists_extracted = artists_from_array
-        .or_else(|| get_string("xesam:artist").map(|s| extract_artists_from_string(&s)))
-        .unwrap_or_default();
-    
-    // tracing::debug!(artist_raw = %artist_raw, all_artists = ?all_artists_extracted, "Artists extracted");
-    let artist = artist_raw;
+    let artist = all_artists_extracted.first().cloned().unwrap_or_default();
     
     // Album: try array first, fallback to string
     let album = get_string_array("xesam:album")
@@ -329,6 +374,7 @@ mod tests {
             album: "".to_string(),
             length: None,
             spotify_id: None,
+            all_artists: vec!["Artist One".to_string(), "Artist Two".to_string()],
         };
 
         assert_eq!(meta.all_artists(), vec!["Artist One", "Artist Two"]);
@@ -342,6 +388,7 @@ mod tests {
             album: "".to_string(),
             length: None,
             spotify_id: None,
+            all_artists: vec!["Artist One".to_string()],
         };
 
         assert_eq!(meta.all_artists(), vec!["Artist One"]);
@@ -355,8 +402,26 @@ mod tests {
             album: "".to_string(),
             length: None,
             spotify_id: None,
+            all_artists: Vec::new(),
         };
 
         assert_eq!(meta.all_artists(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_parse_kugou_title() {
+        let title = "Where Do We Go_ZHANGYE、Steve Aoki、Rosie Darling_高音质在线试听_Where Do We Go歌词|歌曲下载_酷狗音乐";
+        let result = TrackMetadata::parse_kugou_title(title);
+        assert!(result.is_some());
+        let (parsed_title, artists) = result.unwrap();
+        assert_eq!(parsed_title, "Where Do We Go");
+        assert_eq!(artists, vec!["ZHANGYE", "Steve Aoki", "Rosie Darling"]);
+    }
+
+    #[test]
+    fn test_parse_kugou_title_non_kugou() {
+        let title = "Normal Title_Artist";
+        let result = TrackMetadata::parse_kugou_title(title);
+        assert!(result.is_none());
     }
 }

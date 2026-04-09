@@ -89,6 +89,28 @@ fn extract_artists_from_string(s: &str) -> Vec<String> {
 }
 ```
 
+### 问题 5: 酷狗播放器标题格式
+
+**现象**: 酷狗播放器的标题格式特殊，包含多部分信息混合在一起：`title_artists_uselessInfo_lyrics`，如 `Where Do We Go_ZHANGYE、Steve Aoki、Rosie Darling_...歌词...|歌曲下载_酷狗音乐`，且 `xesam:artist` 字段为空。
+
+**修复**: 在 `src/mpris/metadata.rs` 中添加 `parse_kugou_title()` 函数，检测 `歌曲下载_酷狗音乐` 标识，按 `_` 分割提取标题和艺术家列表。
+
+```rust
+fn parse_kugou_title(title: &str) -> Option<(String, Vec<String>)> {
+    if !title.contains("歌曲下载_酷狗音乐") {
+        return None;
+    }
+    let parts: Vec<&str> = title.split('_').collect();
+    let song_title = parts[0].trim().to_string();
+    let artists: Vec<String> = parts[1]
+        .split('、')
+        .map(|a| a.trim().to_string())
+        .filter(|a| !a.is_empty())
+        .collect();
+    Some((song_title, artists))
+}
+```
+
 ### URL 参数说明
 
 - `artist_name`: 艺术家名称
@@ -98,18 +120,19 @@ fn extract_artists_from_string(s: &str) -> Vec<String> {
 
 ### 保留的二进制文件
 
-- `release/lyricsmpris` - 最新版本（含问题1-4修复）
+- `release/lyricsmpris` - 最新版本（含问题1-5修复）
 - `release/lyricsmpris-20260409-194916` - 旧版本（修复前）
 - `release/lyricsmpris-20260409-210507-fix` - 调试版本（带详细日志）
 - `release/lyricsmpris-20260409-214000-multiartist` - 多艺术家依次尝试修复前的版本
 - `release/lyricsmpris-20260409-222300-fix` - 问题4修复后（含调试日志注释版）
+- `release/lyricsmpris-20260409-231156-kugou` - 酷狗播放器解析修复
 
 ### 待提交的文件
 
 ```
 M UPDATE.md                        # 更新记录
 M src/lyrics/providers/lrclib.rs  # Album 过滤修复
-M src/mpris/metadata.rs            # 艺术家列表支持（含问题4修复）
+M src/mpris/metadata.rs            # 艺术家列表支持（含问题4、5修复）
 M src/event.rs                    # 多艺术家尝试逻辑
 M release/lyricsmpris            # 编译后的二进制
 ```
