@@ -190,6 +190,7 @@ enum FetchResult {
 /// - `NonTransient` if a fatal error occurred
 async fn try_provider(provider: &str, meta: &TrackMetadata, state: &mut StateBundle) -> FetchResult {
     match provider {
+        "lrcx" | "lrc.cx" => try_lrcx(meta, state).await,
         "lrclib" => try_lrclib(meta, state).await,
         "musixmatch" => try_musixmatch(meta, state).await,
         _ => {
@@ -216,6 +217,23 @@ async fn store_lyrics_in_cache(
             format,
             raw_text,
         ).await;
+    }
+}
+
+/// Fetches lyrics from lrc.cx.
+///
+/// Network errors are treated as transient to allow fallback to other providers.
+async fn try_lrcx(meta: &TrackMetadata, state: &mut StateBundle) -> FetchResult {
+    match crate::lyrics::fetch_lyrics_from_lrcx(&meta.artist, &meta.title, &meta.album, meta.length).await {
+        Ok((lines, raw)) if !lines.is_empty() => {
+            // lrc.cx returns LRC text format, same storage format as LRCLIB.
+            state.update_lyrics(lines, meta, None, Some(Provider::LRCLIB));
+            store_lyrics_in_cache(meta, raw, crate::lyrics::database::LyricsFormat::Lrclib).await;
+            FetchResult::Success
+        }
+        Ok(_) => FetchResult::Transient,
+        Err(crate::lyrics::LyricsError::Network(_)) => FetchResult::Transient,
+        Err(e) => FetchResult::NonTransient(e),
     }
 }
 

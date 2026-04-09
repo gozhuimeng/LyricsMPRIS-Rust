@@ -58,7 +58,11 @@ impl LoopConfig {
     /// If no providers are specified, defaults to ["lrclib", "musixmatch"].
     fn new(mut config: crate::Config) -> Self {
         let providers = if config.providers.is_empty() {
-            vec!["lrclib".to_string(), "musixmatch".to_string()]
+            vec![
+                "lrcx".to_string(),
+                "lrclib".to_string(),
+                "musixmatch".to_string(),
+            ]
         } else {
             std::mem::take(&mut config.providers)
         };

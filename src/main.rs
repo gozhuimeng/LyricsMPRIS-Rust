@@ -51,7 +51,11 @@ impl Default for Config {
         Self {
             pipe: false,
             block: vec![],
-            providers: vec!["lrclib".to_string(), "musixmatch".to_string()],
+            providers: vec![
+                "lrcx".to_string(),
+                "lrclib".to_string(),
+                "musixmatch".to_string(),
+            ],
             database: None,
             player_service: None,
             no_karaoke: false,

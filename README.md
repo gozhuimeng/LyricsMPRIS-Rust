@@ -97,7 +97,7 @@ export RUST_LOG=lyricsmpris::lyrics=trace  # Trace specific module
 
 ### Default provider list (if --providers not specified)
 ```
-export LYRIC_PROVIDERS="lrclib,musixmatch"
+export LYRIC_PROVIDERS="lrcx,lrclib,musixmatch"
 ```
 
 ### Getting a Musixmatch Token
