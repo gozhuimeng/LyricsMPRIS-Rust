@@ -15,22 +15,21 @@ pub struct TrackMetadata {
     pub spotify_id: Option<String>,
     #[doc(hidden)]
     pub all_artists: Vec<String>,
+    #[doc(hidden)]
+    pub title_raw: String,
+    #[doc(hidden)]
+    pub artist_raw: String,
 }
 
-/// Extracts all artists from a string that may contain multiple artists separated by `/`.
+/// Extracts all artists from a string that may contain multiple artists separated by `/` or `,`.
 ///
-/// Handles formats like "Artist1 / Artist2" or "Artist1/Artist2".
+/// Handles formats like "Artist1 / Artist2", "Artist1, Artist2", or combinations.
 fn extract_artists_from_string(s: &str) -> Vec<String> {
-    if s.contains('/') {
-        s.split('/')
-            .map(|a| a.trim().to_string())
-            .filter(|a| !a.is_empty())
-            .collect()
-    } else if !s.is_empty() {
-        vec![s.to_string()]
-    } else {
-        Vec::new()
-    }
+    // Split by both `/` and `,`, then filter empty strings
+    s.split(&['/', ','][..])
+        .map(|a| a.trim().to_string())
+        .filter(|a| !a.is_empty())
+        .collect()
 }
 
 impl TrackMetadata {
@@ -183,6 +182,8 @@ impl From<MprisMetadata> for TrackMetadata {
             length,
             spotify_id,
             all_artists,
+            title_raw: String::new(),
+            artist_raw: String::new(),
         }
     }
 }
@@ -223,13 +224,19 @@ pub fn extract_metadata(map: &HashMap<String, OwnedValue>) -> TrackMetadata {
     };
 
     let title_raw = get_string("xesam:title").unwrap_or_default();
+    let artist_raw = get_string_array("xesam:artist")
+        .map(|arr| {
+            // Format as array for consistency
+            format!("{:?}", arr)
+        })
+        .or_else(|| get_string("xesam:artist").map(|s| s.to_string()))
+        .unwrap_or_default();
     
     // Check if this is Kugou player title format
     // Format: title_artists_uselessInfo_lyrics
     // Example: "Where Do We Go_ZHANGYE、Steve Aoki、Rosie Darling_...歌词..."
     let (title, all_artists_extracted) = match TrackMetadata::parse_kugou_title(&title_raw) {
         Some((parsed_title, parsed_artists)) => {
-            // tracing::debug!(title = %parsed_title, artists = ?parsed_artists, "Kugou title format detected");
             (parsed_title, parsed_artists)
         }
         None => {
@@ -242,18 +249,11 @@ pub fn extract_metadata(map: &HashMap<String, OwnedValue>) -> TrackMetadata {
                     .collect::<Vec<String>>()
             });
             
-            let artist_raw = artists_from_array
-                .as_ref()
-                .map(|v| v.first().cloned())
-                .flatten()
-                .or_else(|| get_string("xesam:artist"))
-                .unwrap_or_default();
-            
             let all_artists = artists_from_array
                 .or_else(|| get_string("xesam:artist").map(|s| extract_artists_from_string(&s)))
                 .unwrap_or_default();
             
-            (title_raw, all_artists)
+            (title_raw.clone(), all_artists)
         }
     };
     
@@ -292,6 +292,8 @@ pub fn extract_metadata(map: &HashMap<String, OwnedValue>) -> TrackMetadata {
         length,
         spotify_id,
         all_artists: all_artists_extracted,
+        title_raw,
+        artist_raw,
     }
 }
 

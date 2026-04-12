@@ -429,7 +429,9 @@ async fn fetch_api_lyrics(
 
     // Get all artists to try: first artist, second artist, ..., empty string
     let mut artists = meta.all_artists();
-    // tracing::debug!(raw_artist = %meta.artist, artists = ?artists, "Artists extracted");
+    
+    // Filter empty strings for display (don't show the empty string used for fallback search)
+    let artists_display: Vec<String> = artists.iter().filter(|s| !s.is_empty()).cloned().collect();
     
     if artists.is_empty() || artists[0].is_empty() {
         artists.clear();
@@ -437,23 +439,27 @@ async fn fetch_api_lyrics(
         artists.push(String::new()); // Try without artist as last resort
     }
 
+    // [DEBUG-LOG] 元数据解析信息
+    println!("\n=== 歌词查询 ===");
+    println!(
+        "原始标题：{}\n原始艺术家：{}\n处理后标题：{}\n处理后艺术家：{:?}",
+        meta.title_raw, meta.artist_raw, meta.title, artists_display
+    );
+    // [/DEBUG-LOG]
+
+    println!("------------------");
+
     // Database miss - try external providers
     for provider in providers {
         for artist in &artists {
-            // tracing::debug!(
-            //     provider = %provider,
-            //     artist = %artist,
-            //     track = %meta.title,
-            //     "Trying provider with artist"
-            // );
             match try_provider_for_artist(provider, meta, artist, state).await {
                 FetchResult::Success => {
-                    // tracing::debug!("Lyrics found with artist: {}", artist);
+                    // [DEBUG-LOG] 歌词查询成功信息
+                    println!("查找歌词使用的艺术家：{} (平台：{})", artist, provider);
+                    // [/DEBUG-LOG]
                     return;
                 }
                 FetchResult::Transient => {
-                    // Try next artist or next provider
-                    // tracing::debug!("Transient error, trying next");
                     continue;
                 }
                 FetchResult::NonTransient(err) => {

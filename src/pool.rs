@@ -59,8 +59,8 @@ impl LoopConfig {
     fn new(mut config: crate::Config) -> Self {
         let providers = if config.providers.is_empty() {
             vec![
-                "lrcx".to_string(),
                 "lrclib".to_string(),
+                "lrcx".to_string(),
                 "musixmatch".to_string(),
             ]
         } else {

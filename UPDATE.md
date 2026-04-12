@@ -120,19 +120,14 @@ fn parse_kugou_title(title: &str) -> Option<(String, Vec<String>)> {
 
 ### 保留的二进制文件
 
-- `release/lyricsmpris` - 最新版本（含问题1-5修复）
-- `release/lyricsmpris-20260409-194916` - 旧版本（修复前）
-- `release/lyricsmpris-20260409-210507-fix` - 调试版本（带详细日志）
-- `release/lyricsmpris-20260409-214000-multiartist` - 多艺术家依次尝试修复前的版本
-- `release/lyricsmpris-20260409-222300-fix` - 问题4修复后（含调试日志注释版）
-- `release/lyricsmpris-20260409-231156-kugou` - 酷狗播放器解析修复
+| 文件                                      | MD5                                | 对应提交  | 说明                                     |
+| ----------------------------------------- | ---------------------------------- | --------- | ---------------------------------------- |
+| `release/lyricsmpris-20260409-194916`     | `f7ede24962c976073e90c79e58e765f7` | `b1071fe` | 原始版本                                 |
+| `release/lyricsmpris-20260409-210507`     | `1b204517160480d5500695697f4fc8a7` | `3bc1a11` | 问题1-2修复                              |
+| `release/lyricsmpris-20260409-214000`     | `ee9419853067ef2ff4a21332fdc97de1` | `3bc1a11` | 问题1-3修复（多艺术家依次尝试）          |
+| `release/lyricsmpris-20260409-222300`     | `d6de421a7cd3472d8d27db01c6ca6628` | `3bc1a11` | 问题4修复                                |
+| `release/lyricsmpris-20260409-231156`     | `314c8ac72c52cd37692b005bb7726941` | `5bcf9d8` | 问题5修复（酷狗格式）                    |
+| `release/lyricsmpris-20260412-150747`     | `314c8ac72c52cd37692b005bb7726941` | `5bcf9d8` | 问题5修复前备份                          |
+| `release/lyricsmpris-20260412-161313-log` | `d34fb80347e896d749cdaeedbf9a6f7e` | `5bcf9d8` | **带调试日志版本**（用于诊断播放器问题） |
 
-### 待提交的文件
-
-```
-M UPDATE.md                        # 更新记录
-M src/lyrics/providers/lrclib.rs  # Album 过滤修复
-M src/mpris/metadata.rs            # 艺术家列表支持（含问题4、5修复）
-M src/event.rs                    # 多艺术家尝试逻辑
-M release/lyricsmpris            # 编译后的二进制
-```
+> 不记录`release/lyricsmpris`

@@ -20,7 +20,6 @@ pub async fn fetch_lyrics_from_lrclib(
     duration: Option<f64>,
 ) -> ProviderResult {
     let url = build_lrclib_url(artist, title, album, duration);
-    // tracing::debug!(artist = %artist, url = %url, "lrclib request");
     
     let resp = http_client()
         .get(&url)
@@ -28,18 +27,20 @@ pub async fn fetch_lyrics_from_lrclib(
         .send()
         .await?;
 
-    // tracing::debug!(status = %resp.status(), "lrclib response");
-
     // 404 means no lyrics found - not an error
     if resp.status().as_u16() == 404 {
+        // [DEBUG-LOG]
+        println!("查询失败：{}", url);
+        // [/DEBUG-LOG]
         return Ok((Vec::new(), None));
     }
 
     if !resp.status().is_success() {
-        return Err(LyricsError::Api(format!(
-            "lrclib: HTTP {}",
-            resp.status()
-        )));
+        let err = format!("lrclib: HTTP {}", resp.status());
+        // [DEBUG-LOG]
+        println!("查询失败：{} | {}", url, err);
+        // [/DEBUG-LOG]
+        return Err(LyricsError::Api(err));
     }
 
     let response: LrcLibResponse = resp.json().await?;
@@ -47,9 +48,17 @@ pub async fn fetch_lyrics_from_lrclib(
     match response.syncedLyrics {
         Some(synced) if !synced.is_empty() => {
             let parsed = parse_synced_lyrics(&synced);
+            // [DEBUG-LOG]
+            println!("查询成功：{}\n------------------", url);
+            // [/DEBUG-LOG]
             Ok((parsed, Some(synced)))
         }
-        _ => Ok((Vec::new(), None)),
+        _ => {
+            // [DEBUG-LOG]
+            println!("查询失败：{} | 无歌词内容", url);
+            // [/DEBUG-LOG]
+            Ok((Vec::new(), None))
+        }
     }
 }
 
