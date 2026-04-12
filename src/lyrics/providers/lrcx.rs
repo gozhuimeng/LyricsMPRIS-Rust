@@ -26,7 +26,7 @@ pub async fn fetch_lyrics_from_lrcx(
 
     if resp.status().as_u16() == 404 {
         // [DEBUG-LOG]
-        println!("查询失败：{}", url);
+        // println!("查询失败：{}", url);
         // [/DEBUG-LOG]
         return Ok((Vec::new(), None));
     }
@@ -34,7 +34,7 @@ pub async fn fetch_lyrics_from_lrcx(
     if !resp.status().is_success() {
         let err = format!("lrcx: HTTP {}", resp.status());
         // [DEBUG-LOG]
-        println!("查询失败：{} | {}", url, err);
+        // println!("查询失败：{} | {}", url, err);
         // [/DEBUG-LOG]
         return Err(LyricsError::Api(err));
     }
@@ -43,7 +43,7 @@ pub async fn fetch_lyrics_from_lrcx(
     let trimmed = body.trim();
     if trimmed.is_empty() {
         // [DEBUG-LOG]
-        println!("查询失败：{} | 空响应", url);
+        // println!("查询失败：{} | 空响应", url);
         // [/DEBUG-LOG]
         return Ok((Vec::new(), None));
     }
@@ -51,7 +51,7 @@ pub async fn fetch_lyrics_from_lrcx(
     let parsed_lrc = parse_synced_lyrics(trimmed);
     if !parsed_lrc.is_empty() {
         // [DEBUG-LOG]
-        println!("查询成功：{}\n------------------", url);
+        // println!("查询成功：{}\n------------------", url);
         // [/DEBUG-LOG]
         return Ok((parsed_lrc, Some(trimmed.to_string())));
     }
@@ -63,14 +63,14 @@ pub async fn fetch_lyrics_from_lrcx(
         let parsed = parse_synced_lyrics(raw_lrc);
         if !parsed.is_empty() {
             // [DEBUG-LOG]
-            println!("查询成功：{}\n------------------", url);
+            // println!("查询成功：{}\n------------------", url);
             // [/DEBUG-LOG]
             return Ok((parsed, Some(raw_lrc.to_string())));
         }
     }
 
     // [DEBUG-LOG]
-    println!("查询失败：{} | 解析失败", url);
+    // println!("查询失败：{} | 解析失败", url);
     // [/DEBUG-LOG]
     Ok((Vec::new(), None))
 }

@@ -17,7 +17,7 @@ pub async fn fetch_lyrics_from_musixmatch_usertoken(
         Some(t) if !t.is_empty() => t,
         _ => {
             // [DEBUG-LOG]
-            println!("查询失败：musixmatch | 缺少 MUSIXMATCH_USERTOKEN");
+            // println!("查询失败：musixmatch | 缺少 MUSIXMATCH_USERTOKEN");
             // [/DEBUG-LOG]
             return Ok((Vec::new(), None));
         }
@@ -107,7 +107,7 @@ pub async fn fetch_lyrics_from_musixmatch_usertoken(
         
         if let Some((parsed, raw)) = try_macro_for_lyrics(&client, &params).await? {
             // [DEBUG-LOG]
-            println!("查询成功：musixmatch (Spotify ID策略)\n------------------");
+            // println!("查询成功：musixmatch (Spotify ID策略)\n------------------");
             // [/DEBUG-LOG]
             return Ok((parsed, Some(raw)));
         }
@@ -205,7 +205,7 @@ pub async fn fetch_lyrics_from_musixmatch_usertoken(
 
                 if let Some((parsed, raw)) = try_macro_for_lyrics(&client, &params).await? {
                     // [DEBUG-LOG]
-                    println!("查询成功：musixmatch (搜索策略)\n------------------");
+                    // println!("查询成功：musixmatch (搜索策略)\n------------------");
                     // [/DEBUG-LOG]
                     return Ok((parsed, Some(raw)));
                 }
@@ -214,7 +214,7 @@ pub async fn fetch_lyrics_from_musixmatch_usertoken(
     }
 
     // [DEBUG-LOG]
-    println!("查询失败：musixmatch | 未找到匹配的歌词");
+    // println!("查询失败：musixmatch | 未找到匹配的歌词");
     // [/DEBUG-LOG]
     Ok((Vec::new(), None))
 }

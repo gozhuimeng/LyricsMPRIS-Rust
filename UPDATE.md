@@ -111,6 +111,38 @@ fn parse_kugou_title(title: &str) -> Option<(String, Vec<String>)> {
 }
 ```
 
+### 问题 6: Spotify 平台艺术家分隔符
+
+**现象**: Spotify 播放器的多艺术家格式使用 `,` 作为分隔符（如 `Promoting Sounds, Powfu, Ouse`），导致艺术家解析不正确。
+
+**原因**: 与问题 1 类似，不同播放器使用不同的分隔符。Spotify 使用逗号，而之前只支持 `/` 分隔符。
+
+**修复**: 在 `src/mpris/metadata.rs` 的 `extract_artists_from_string()` 中添加对 `,` 分隔符的支持。
+
+```rust
+fn extract_artists_from_string(s: &str) -> Vec<String> {
+    if s.contains('/') {
+        s.split('/')
+            .map(|a| a.trim().to_string())
+            .filter(|a| !a.is_empty())
+            .collect()
+    } else if s.contains(',') {
+        s.split(',')
+            .map(|a| a.trim().to_string())
+            .filter(|a| !a.is_empty())
+            .collect()
+    } else if !s.is_empty() {
+        vec![s.to_string()]
+    } else {
+        Vec::new()
+    }
+}
+```
+
+**附属修复**:
+- 调整 API 调用顺序：按 providers 循环在外、artists 循环在内，提高效率
+- 过滤空字符串，避免无效 API 调用
+
 ### URL 参数说明
 
 - `artist_name`: 艺术家名称
@@ -129,5 +161,6 @@ fn parse_kugou_title(title: &str) -> Option<(String, Vec<String>)> {
 | `release/lyricsmpris-20260409-231156`     | `314c8ac72c52cd37692b005bb7726941` | `5bcf9d8` | 问题5修复（酷狗格式）                    |
 | `release/lyricsmpris-20260412-150747`     | `314c8ac72c52cd37692b005bb7726941` | `5bcf9d8` | 问题5修复前备份                          |
 | `release/lyricsmpris-20260412-161313-log` | `d34fb80347e896d749cdaeedbf9a6f7e` | `5bcf9d8` | **带调试日志版本**（用于诊断播放器问题） |
+| `release/lyricsmpris-20260412-162801-latest` | `683cb2a5767ad0dcfbbae3d5c719a70a` | `5bcf9d8` | 最新版本（无调试日志） |
 
 > 不记录`release/lyricsmpris`

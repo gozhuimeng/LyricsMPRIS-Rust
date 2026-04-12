@@ -440,11 +440,11 @@ async fn fetch_api_lyrics(
     }
 
     // [DEBUG-LOG] 元数据解析信息
-    println!("\n=== 歌词查询 ===");
-    println!(
-        "原始标题：{}\n原始艺术家：{}\n处理后标题：{}\n处理后艺术家：{:?}",
-        meta.title_raw, meta.artist_raw, meta.title, artists_display
-    );
+    // println!("\n=== 歌词查询 ===");
+    // println!(
+    //     "原始标题：{}\n原始艺术家：{}\n处理后标题：{}\n处理后艺术家：{:?}",
+    //     meta.title_raw, meta.artist_raw, meta.title, artists_display
+    // );
     // [/DEBUG-LOG]
 
     println!("------------------");
@@ -455,7 +455,7 @@ async fn fetch_api_lyrics(
             match try_provider_for_artist(provider, meta, artist, state).await {
                 FetchResult::Success => {
                     // [DEBUG-LOG] 歌词查询成功信息
-                    println!("查找歌词使用的艺术家：{} (平台：{})", artist, provider);
+                    // println!("查找歌词使用的艺术家：{} (平台：{})", artist, provider);
                     // [/DEBUG-LOG]
                     return;
                 }

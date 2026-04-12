@@ -30,7 +30,7 @@ pub async fn fetch_lyrics_from_lrclib(
     // 404 means no lyrics found - not an error
     if resp.status().as_u16() == 404 {
         // [DEBUG-LOG]
-        println!("查询失败：{}", url);
+        // println!("查询失败：{}", url);
         // [/DEBUG-LOG]
         return Ok((Vec::new(), None));
     }
@@ -38,7 +38,7 @@ pub async fn fetch_lyrics_from_lrclib(
     if !resp.status().is_success() {
         let err = format!("lrclib: HTTP {}", resp.status());
         // [DEBUG-LOG]
-        println!("查询失败：{} | {}", url, err);
+        // println!("查询失败：{} | {}", url, err);
         // [/DEBUG-LOG]
         return Err(LyricsError::Api(err));
     }
@@ -49,13 +49,13 @@ pub async fn fetch_lyrics_from_lrclib(
         Some(synced) if !synced.is_empty() => {
             let parsed = parse_synced_lyrics(&synced);
             // [DEBUG-LOG]
-            println!("查询成功：{}\n------------------", url);
+            // println!("查询成功：{}\n------------------", url);
             // [/DEBUG-LOG]
             Ok((parsed, Some(synced)))
         }
         _ => {
             // [DEBUG-LOG]
-            println!("查询失败：{} | 无歌词内容", url);
+            // println!("查询失败：{} | 无歌词内容", url);
             // [/DEBUG-LOG]
             Ok((Vec::new(), None))
         }
