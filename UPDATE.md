@@ -140,6 +140,7 @@ fn extract_artists_from_string(s: &str) -> Vec<String> {
 ```
 
 **附属修复**:
+
 - 调整 API 调用顺序：按 providers 循环在外、artists 循环在内，提高效率
 - 过滤空字符串，避免无效 API 调用
 
@@ -152,15 +153,15 @@ fn extract_artists_from_string(s: &str) -> Vec<String> {
 
 ### 保留的二进制文件
 
-| 文件                                      | MD5                                | 对应提交  | 说明                                     |
-| ----------------------------------------- | ---------------------------------- | --------- | ---------------------------------------- |
-| `release/lyricsmpris-20260409-194916`     | `f7ede24962c976073e90c79e58e765f7` | `b1071fe` | 原始版本                                 |
-| `release/lyricsmpris-20260409-210507`     | `1b204517160480d5500695697f4fc8a7` | `3bc1a11` | 问题1-2修复                              |
-| `release/lyricsmpris-20260409-214000`     | `ee9419853067ef2ff4a21332fdc97de1` | `3bc1a11` | 问题1-3修复（多艺术家依次尝试）          |
-| `release/lyricsmpris-20260409-222300`     | `d6de421a7cd3472d8d27db01c6ca6628` | `3bc1a11` | 问题4修复                                |
-| `release/lyricsmpris-20260409-231156`     | `314c8ac72c52cd37692b005bb7726941` | `5bcf9d8` | 问题5修复（酷狗格式）                    |
-| `release/lyricsmpris-20260412-150747`     | `314c8ac72c52cd37692b005bb7726941` | `5bcf9d8` | 问题5修复前备份                          |
-| `release/lyricsmpris-20260412-161313-log` | `d34fb80347e896d749cdaeedbf9a6f7e` | `5bcf9d8` | **带调试日志版本**（用于诊断播放器问题） |
-| `release/lyricsmpris-20260412-162801-latest` | `683cb2a5767ad0dcfbbae3d5c719a70a` | `5bcf9d8` | 最新版本（无调试日志） |
+| 文件                                         | MD5                                | 对应提交  | 说明                                     |
+| -------------------------------------------- | ---------------------------------- | --------- | ---------------------------------------- |
+| `release/lyricsmpris-20260409-194916`        | `f7ede24962c976073e90c79e58e765f7` | `b1071fe` | 原始版本                                 |
+| `release/lyricsmpris-20260409-210507`        | `1b204517160480d5500695697f4fc8a7` | `3bc1a11` | 问题1-2修复                              |
+| `release/lyricsmpris-20260409-214000`        | `ee9419853067ef2ff4a21332fdc97de1` | `3bc1a11` | 问题1-3修复（多艺术家依次尝试）          |
+| `release/lyricsmpris-20260409-222300`        | `d6de421a7cd3472d8d27db01c6ca6628` | `3bc1a11` | 问题4修复                                |
+| `release/lyricsmpris-20260409-231156`        | `314c8ac72c52cd37692b005bb7726941` | `5bcf9d8` | 问题5修复（酷狗格式）                    |
+| `release/lyricsmpris-20260412-150747`        | `314c8ac72c52cd37692b005bb7726941` | `5bcf9d8` | 问题5修复前备份                          |
+| `release/lyricsmpris-20260412-161313-log`    | `d34fb80347e896d749cdaeedbf9a6f7e` | `5bcf9d8` | **带调试日志版本**（用于诊断播放器问题） |
+| `release/lyricsmpris-20260412-162801-latest` | `046e6925d9ac3baf54ab2cacbeb9af4c` | `5bcf9d8` | 最新版本（无调试日志）                   |
 
 > 不记录`release/lyricsmpris`
